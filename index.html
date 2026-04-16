@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>수업기록 자동완성</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f0; color: #1a1a18; padding: 20px; max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 18px; font-weight: 500; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #5f5e5a; margin-bottom: 16px; }
+  .card { background: #fff; border: 0.5px solid #d3d1c7; border-radius: 12px; padding: 16px 20px; margin-bottom: 12px; }
+  .section-title { font-size: 15px; font-weight: 500; margin-bottom: 12px; }
+  .grade-label { font-size: 13px; font-weight: 500; color: #5f5e5a; margin: 0 0 8px; }
+  .student-block { border: 0.5px solid #d3d1c7; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+  .student-top { display: grid; grid-template-columns: 80px 1fr 1fr; gap: 8px; align-items: center; margin-bottom: 6px; }
+  .student-name { font-size: 14px; font-weight: 500; }
+  .student-bottom { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  input[type="text"], input[type="time"], input[type="date"] { font-size: 13px; padding: 6px 8px; border: 0.5px solid #d3d1c7; border-radius: 8px; background: #fff; color: #1a1a18; width: 100%; outline: none; }
+  input[type="text"]:focus, input[type="time"]:focus, input[type="date"]:focus { border-color: #888780; }
+  input[type="text"]:disabled { opacity: 0.3; background: #f5f5f0; }
+  .check-label { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #5f5e5a; cursor: pointer; white-space: nowrap; }
+  .reason-input { font-size: 12px !important; padding: 4px 8px !important; width: 180px !important; }
+  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 99px; margin-left: 4px; }
+  .badge.absent { background: #fcebeb; color: #791F1F; }
+  .badge.sick { background: #faeeda; color: #633806; }
+  .result-box { background: #f5f5f0; border: 0.5px solid #d3d1c7; border-radius: 8px; padding: 16px; font-size: 13px; line-height: 1.8; white-space: pre-wrap; color: #1a1a18; min-height: 100px; }
+  .btn { background: #fff; border: 0.5px solid #b4b2a9; border-radius: 8px; padding: 8px 16px; font-size: 13px; cursor: pointer; color: #1a1a18; }
+  .btn:hover { background: #f5f5f0; }
+  .btn:active { transform: scale(0.98); }
+  .btn-add { width: 100%; margin-top: 4px; }
+  .time-row { display: flex; gap: 16px; align-items: center; margin-bottom: 10px; }
+  .time-row label { font-size: 13px; color: #5f5e5a; min-width: 48px; }
+  .time-row input { width: 160px; }
+  .result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .toast { display: none; text-align: center; font-size: 13px; color: #3B6D11; margin-top: 8px; }
+  .teacher-input { font-size: 13px; padding: 6px 8px; border: 0.5px solid #d3d1c7; border-radius: 8px; background: #fff; color: #1a1a18; width: 140px; outline: none; margin-left: 8px; }
+</style>
+</head>
+<body>
+
+<h1>수업기록 자동완성</h1>
+<p class="subtitle">수업 내용을 입력하면 카톡 전송 형식으로 자동 변환해드려요.</p>
+
+<div class="card">
+  <p class="section-title">기본 정보</p>
+  <div class="time-row">
+    <label>날짜</label>
+    <input type="date" id="date-input" oninput="updateResult()" style="width:160px">
+  </div>
+  <div class="time-row">
+    <label>출근</label>
+    <input type="time" id="in-time" value="17:00" oninput="updateResult()" style="width:120px">
+    <label>퇴근</label>
+    <input type="time" id="out-time" value="22:00" oninput="updateResult()" style="width:120px">
+  </div>
+  <div class="time-row">
+    <label>선생님</label>
+    <input type="text" id="teacher-name" placeholder="이름 입력" value="홍길동" oninput="updateResult()" style="width:140px">
+    <label style="margin-left:8px">과목</label>
+    <input type="text" id="subject" placeholder="과목" value="수학" oninput="updateResult()" style="width:100px">
+  </div>
+</div>
+
+<div class="card">
+  <p class="section-title">수업 내용 입력</p>
+  <div id="students-container"></div>
+  <button class="btn btn-add" onclick="addStudent()">+ 학생 추가</button>
+</div>
+
+<div class="card">
+  <div class="result-header">
+    <p class="section-title" style="margin:0">카톡 전송용 결과</p>
+    <button class="btn" onclick="copyText()">복사 ↗</button>
+  </div>
+  <div class="result-box" id="result">수업 내용을 입력하면 자동으로 생성됩니다.</div>
+  <div class="toast" id="copy-toast">복사됐어요!</div>
+</div>
+
+<script>
+const defaultStudents = [
+  {grade:'고1',name:'학생A'},{grade:'고1',name:'학생B'},{grade:'고1',name:'학생C'},
+  {grade:'고2',name:'학생D'},{grade:'고2',name:'학생E'},
+  {grade:'고3',name:'학생F'},{grade:'고3',name:'학생G'}
+];
+
+let students = defaultStudents.map(s=>({...s,content:'',homework:'',absent:false,sick:false,reason:''}));
+
+function getDayStr(){
+  const days=['일','월','화','수','목','금','토'];
+  const val=document.getElementById('date-input').value;
+  const d=val?new Date(val+'T00:00:00'):new Date();
+  return `${d.getMonth()+1}/${d.getDate()}(${days[d.getDay()]})`;
+}
+
+function initDate(){
+  const d=new Date();
+  const yyyy=d.getFullYear();
+  const mm=String(d.getMonth()+1).padStart(2,'0');
+  const dd=String(d.getDate()).padStart(2,'0');
+  document.getElementById('date-input').value=`${yyyy}-${mm}-${dd}`;
+}
+
+function fmtTime(val){
+  if(!val)return'';
+  const [h,m]=val.split(':').map(Number);
+  const ampm=h<12?'오전':'오후';
+  const hh=h%12||12;
+  return `${ampm} ${hh}:${m.toString().padStart(2,'0')}`;
+}
+
+function render(){
+  const c=document.getElementById('students-container');
+  const grades=[...new Set(students.map(s=>s.grade))];
+  c.innerHTML='';
+  grades.forEach(grade=>{
+    const gradeStudents=students.filter(s=>s.grade===grade);
+    const div=document.createElement('div');
+    div.style.marginBottom='16px';
+    div.innerHTML=`<p class="grade-label">${grade}</p>`;
+    gradeStudents.forEach(s=>{
+      const idx=students.indexOf(s);
+      const isAbsent=s.absent||s.sick;
+      const block=document.createElement('div');
+      block.className='student-block';
+      const badge = s.sick
+        ? `<span class="badge sick">병결</span>`
+        : s.absent && s.reason
+          ? `<span class="badge absent">${s.reason}</span>`
+          : s.absent ? `<span class="badge absent">결석</span>` : '';
+      block.innerHTML=`
+        <div class="student-top">
+          <span class="student-name">${s.name}${badge}</span>
+          <input type="text" placeholder="수업 내용" value="${s.content}" ${isAbsent?'disabled':''} oninput="students[${idx}].content=this.value;updateResult()">
+          <input type="text" placeholder="과제" value="${s.homework}" oninput="students[${idx}].homework=this.value;updateResult()">
+        </div>
+        <div class="student-bottom">
+          <label class="check-label">
+            <input type="checkbox" ${s.absent?'checked':''} onchange="students[${idx}].absent=this.checked;if(this.checked)students[${idx}].sick=false;render();updateResult()"> 결석
+          </label>
+          <label class="check-label">
+            <input type="checkbox" ${s.sick?'checked':''} onchange="students[${idx}].sick=this.checked;if(this.checked)students[${idx}].absent=false;render();updateResult()"> 병결
+          </label>
+          ${s.absent?`<input class="reason-input" type="text" placeholder="결석 사유" value="${s.reason}" oninput="students[${idx}].reason=this.value;render();updateResult()">`:'' }
+        </div>`;
+      div.appendChild(block);
+    });
+    c.appendChild(div);
+  });
+  updateResult();
+}
+
+function addStudent(){
+  const grade=prompt('학년 입력 (고1 / 고2 / 고3)','고1');
+  const name=prompt('학생 이름 입력','');
+  if(grade&&name)students.push({grade,name,content:'',homework:'',absent:false,sick:false,reason:''});
+  render();
+}
+
+function updateResult(){
+  const inT=fmtTime(document.getElementById('in-time').value);
+  const outT=fmtTime(document.getElementById('out-time').value);
+  const teacher=document.getElementById('teacher-name').value||'선생님';
+  const subject=document.getElementById('subject').value||'수업';
+  const day=getDayStr();
+  let txt=`${day} 일일수업기록 / ${subject} / ${teacher} T\n\n*근무 현황\n- 출근 시간: ${inT}\n- 퇴근 시간: ${outT}\n\n*수업 특이사항\n`;
+  const grades=[...new Set(students.map(s=>s.grade))];
+  grades.forEach(grade=>{
+    const gs=students.filter(s=>s.grade===grade);
+    txt+=`\n- ${grade} ${subject}\n`;
+    gs.forEach(s=>{
+      if(s.sick){
+        txt+=`${s.name} / 병결\n과제 : ${s.homework||'-'}\n\n`;
+      } else if(s.absent){
+        const r=s.reason?` (${s.reason})`:'';
+        txt+=`${s.name} / 결석${r}\n과제 : ${s.homework||'-'}\n\n`;
+      } else {
+        txt+=`${s.name} / ${s.content||'-'}\n과제 : ${s.homework||'-'}\n\n`;
+      }
+    });
+  });
+  document.getElementById('result').textContent=txt.trim();
+}
+
+function copyText(){
+  const t=document.getElementById('result').textContent;
+  navigator.clipboard.writeText(t).then(()=>{
+    const toast=document.getElementById('copy-toast');
+    toast.style.display='block';
+    setTimeout(()=>toast.style.display='none',2000);
+  });
+}
+
+initDate();
+render();
+</script>
+</body>
+</html>
